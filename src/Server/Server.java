@@ -1,11 +1,17 @@
 package Server;
 
+import Units.UID;
+
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class Server implements Runnable {
+	List<ClientHandler> clients = Collections.synchronizedList(new ArrayList<ClientHandler>());
 	private static volatile Server server = null;
-	private final int port = 9999;
+	private final int port = 9998;
 	private ServerSocket serverSocket = null;
 	private Server(){}
 	public static Server newServer() {
@@ -24,9 +30,10 @@ public class Server implements Runnable {
 		try {
 			serverSocket = new ServerSocket(port);
 			while (true) {
-				ClientThreadContext client;
+				ClientHandler client;
 				try {
-					client = new ClientThreadContext(serverSocket.accept());
+					client = new ClientHandler(serverSocket.accept(), this);
+					clients.add(client);
 					Thread thread = new Thread(client);
 					thread.start();
 				} catch (IOException e) {

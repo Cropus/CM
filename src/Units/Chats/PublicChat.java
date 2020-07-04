@@ -5,7 +5,7 @@ import Units.User;
 
 import java.util.ArrayList;
 
-public class PublicChat {
+public class PublicChat extends Chat{
 	private int ID;
 	private String name;
 	private ArrayList<User> users = new ArrayList<>();

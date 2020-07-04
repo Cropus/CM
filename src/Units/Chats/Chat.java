@@ -2,5 +2,5 @@ package Units.Chats;
 
 import Units.UID;
 
-public interface Chat {
+public abstract class Chat {
 }

@@ -1,16 +1,17 @@
 package Units;
 
+import Units.Chats.PM;
+import Units.Chats.PublicChat;
+
+import java.util.ArrayList;
+
 public class User {
 	private int ID;
 	private String login;
-	private String password;
-	private int hash;
 
-	User(String login, String password) {
+	User(String login) {
 		this.login = login;
-		this.password = password;
 		this.ID = UID.generate();
-		this.hash = this.password.hashCode();
 	}
 
 	public int getID() {
@@ -21,11 +22,4 @@ public class User {
 		return login;
 	}
 
-	public int getHash() {
-		return hash;
-	}
-
-	public String getPassword() {
-		return password;
-	}
 }

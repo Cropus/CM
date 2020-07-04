@@ -3,7 +3,7 @@ package Units.Chats;
 import Units.UID;
 import Units.User;
 
-public class PM implements Chat {
+public class PM extends Chat {
 	private int ID;
 	private User first;
 	private User second;

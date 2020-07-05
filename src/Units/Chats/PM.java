@@ -9,6 +9,7 @@ public class PM extends Chat {
 	private User second;
 
 	PM(User first, User second) {
+		super();
 		this.ID = UID.generate();
 		this.first = first;
 		this.second = second;

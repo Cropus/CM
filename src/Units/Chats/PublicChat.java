@@ -1,5 +1,6 @@
 package Units.Chats;
 
+import Units.Message;
 import Units.UID;
 import Units.User;
 
@@ -8,15 +9,15 @@ import java.util.ArrayList;
 public class PublicChat extends Chat{
 	private int ID;
 	private String name;
-	private ArrayList<User> users = new ArrayList<>();
+	private ArrayList<Message> messages = new ArrayList<>();
 
-	PublicChat (String name) {
+	public PublicChat(String name) {
 		this.ID = UID.generate();
 		this.name = name;
 	}
 
-	public void addUser(User noob) {
-		users.add(noob);
+	public void addMessage(Message blank) {
+		messages.add(blank);
 	}
 
 	public int getID() {
@@ -27,7 +28,7 @@ public class PublicChat extends Chat{
 		return name;
 	}
 
-	public ArrayList<User> getUsers() {
-		return users;
+	public ArrayList<Message> getMessages() {
+		return messages;
 	}
 }

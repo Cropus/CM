@@ -1,9 +1,16 @@
 package Server;
 
+import Exceptions.ChatException;
+import Exceptions.ChatNotFoundException;
 import Exceptions.LoginExistsException;
+import Units.Chats.PublicChat;
 import Units.Credential;
 import Units.Message;
+import Units.Requests.ChangeRequest;
+import Units.Requests.CreateRequest;
+import Units.Requests.EnterRequest;
 import Units.UID;
+import Units.User;
 
 import javax.net.ssl.SSLSocket;
 import java.io.*;
@@ -16,10 +23,12 @@ public class ClientHandler implements Runnable {
 	private String name;
 	private Server server;
 	private int currentID = 0;
+	private int currentChatID;
 	private final String driver = "com.mysql.cj.jdbc.Driver";
 	private final String url = "jdbc:mysql://localhost:9999/cm?serverTimezone=UTC";
 	private final String login = "root";
 	private final String password = "root";
+	Connection connection;
 	private SSLSocket clientSocket;
 	private ObjectInputStream input = null;
 	private ObjectOutputStream output = null;
@@ -27,12 +36,19 @@ public class ClientHandler implements Runnable {
 	public ClientHandler(SSLSocket socket, Server server) {
 		this.server = server;
 		clientSocket = socket;
+		currentChatID = 0;
 
 		try {
+			Class.forName(driver);
+			connection = DriverManager.getConnection(url, login, password);
 			input = new ObjectInputStream(clientSocket.getInputStream());
 			output = new ObjectOutputStream(clientSocket.getOutputStream());
 		} catch (IOException e) {
 //TODO log
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		} catch (SQLException e) {
+			e.printStackTrace();
 		}
 	}
 
@@ -40,6 +56,7 @@ public class ClientHandler implements Runnable {
 	public void run() {
 		while (true) {
 			try {
+
 				Object in = input.readObject();
 				if (in instanceof Credential) {
 					Credential cred = (Credential) in;
@@ -49,80 +66,95 @@ public class ClientHandler implements Runnable {
 						signIn(cred);
 					}
 					name = cred.getLogin();
+				} else if (in instanceof ChangeRequest) {
+					ChangeRequest changeRequest = (ChangeRequest) in;
+					if (!myChats.contains(changeRequest.getChatID())) {
+						output.writeObject(new ChatNotFoundException(true, changeRequest));
+					} else {
+						currentChatID = changeRequest.getChatID();
+						output.writeObject(new ChatNotFoundException(false, changeRequest));
+					}
+					output.writeObject(server.chats.get(currentChatID));
+				} else if (in instanceof CreateRequest) {
+					PublicChat newChat = new PublicChat(((CreateRequest) in).getName());
+					myChats.add(newChat.getID());
+
+					String addChatAndUsers = "INSERT INTO chatsandusers (ChatID, UserID) VALUES (?, ?)";
+					PreparedStatement userStmt = connection.prepareStatement(addChatAndUsers);
+					userStmt.setInt(1, newChat.getID());
+					userStmt.setInt(2, currentID);
+					userStmt.execute();
+					String addChatAndNames = "INSERT INTO chatsandnames (ChatID, Name) VALUES (?, ?)";
+					PreparedStatement nameStmt = connection.prepareStatement(addChatAndNames);
+					nameStmt.setInt(1, newChat.getID());
+					nameStmt.setString(2, newChat.getName());
+					nameStmt.execute();
+					currentChatID = newChat.getID();
+				} else if (in instanceof EnterRequest) {
+					EnterRequest enterRequest = (EnterRequest) in;
+					String searchChat = "SELECT * FROM chatsandnames WHERE Name = ?";
+					PreparedStatement searchStmt = connection.prepareStatement(searchChat);
+					searchStmt.setString(1, enterRequest.getChatName());
+					ResultSet searchResult = searchStmt.executeQuery();
+					if (searchResult.next()) {
+						currentChatID = searchResult.getInt(1);
+						String enterChat = "INSERT INTO chatsandusers (ChatID, UserID) VALUES (?, ?)";
+						PreparedStatement enterChatStmt = connection.prepareStatement(enterChat);
+						enterChatStmt.setInt(1, currentChatID);
+						enterChatStmt.setInt(2, currentID);
+						enterChatStmt.execute();
+
+						myChats.add(currentChatID);
+					} else {
+						throw new ChatException();
+					}
+					output.writeObject(server.chats.get(currentChatID));
 				} else if (in instanceof Message) {
 					Message message = (Message) in;
 					message.setID(UID.generate());
 					message.setFrom(currentID);
-//					synchronized (server.clients) {
-//						Iterator<ClientHandler> iter = server.clients.iterator();
-//						while (iter.hasNext()) {
-//							ClientHandler cl = iter.next();
-//							if (cl != null && cl.myChats.contains(message.getTo())) {
-//								if (cl != this) {
-//									cl.output.writeObject(name + " cames now");
-//									cl.output.flush();
-//								} else {
-//									cl.output.writeObject("Welcome, " + name);
-//									cl.output.flush();
-//								}
-//							}
-//						}
-//					}
-
-					while (true) {
-						str = message.getText();
-						if (str.equals("exit")) break;
-
-						Class.forName(driver);
-						Connection connection = DriverManager.getConnection(url, login, password);
-						String newMessage = "INSERT INTO messages (ID, text, `from`, `to`) VALUES (?, ?, ?, ?)";
-						PreparedStatement preparedStmt = connection.prepareStatement(newMessage);
-						preparedStmt.setInt(1, message.getID());
-						preparedStmt.setString(2, str);
-						preparedStmt.setInt(3, currentID);
-						preparedStmt.setInt(4, message.getTo());
-						preparedStmt.execute();
-
-						String connectMessageToChat = "INSERT INTO chatsandmessages (ChatID, MessageID) VALUES (?, ?)";
-						PreparedStatement connectMtoC = connection.prepareStatement(connectMessageToChat);
-						connectMtoC.setInt(1, message.getTo());
-						connectMtoC.setInt(2, message.getID());
-						connectMtoC.execute();
-
-						synchronized (server.clients) {
-							Iterator<ClientHandler> iter = server.clients.iterator();
-							while (iter.hasNext()) {
-								ClientHandler cl = iter.next();
-								if (cl != null && cl.myChats.contains(message.getTo())) {
-									if (cl != this) {
-										cl.output.writeObject(name + ": " + str);
-										cl.output.flush();
-									}
-								}
-							}
-						}
-
-						message = (Message) input.readObject();
-						message.setID(UID.generate());
+					str = message.getText();
+					if (str.equals("exit")) break;
+					String newMessage = "INSERT INTO messages (ID, text, `from`, `to`, fromName) VALUES (?, ?, ?, ?, ?)";
+					PreparedStatement preparedStmt = connection.prepareStatement(newMessage);
+					preparedStmt.setInt(1, message.getID());
+					preparedStmt.setString(2, str);
+					preparedStmt.setInt(3, currentID);
+					preparedStmt.setInt(4, currentChatID);
+					preparedStmt.setString(5, name);
+					preparedStmt.execute();
+					String connectMessageToChat = "INSERT INTO chatsandmessages (ChatID, MessageID) VALUES (?, ?)";
+					PreparedStatement connectMtoC = connection.prepareStatement(connectMessageToChat);
+					connectMtoC.setInt(1, currentChatID);
+					connectMtoC.setInt(2, message.getID());
+					connectMtoC.execute();
+					if (!server.chats.containsKey(currentChatID)) {
+						server.chats.put(currentChatID, new ArrayList<>());
 					}
+					message.setFrom(currentID);
+					message.setName(name);
+					server.chats.get(currentChatID).add(message);
 
 					synchronized (server.clients) {
 						Iterator<ClientHandler> iter = server.clients.iterator();
 						while (iter.hasNext()) {
 							ClientHandler cl = iter.next();
-							if (cl != null && cl.myChats.contains(message.getTo())) {
+							if (cl != null && cl.myChats.contains(currentChatID) && (cl.currentChatID == currentChatID)) {
 								if (cl != this) {
-									cl.output.writeObject(name + " has left");
+									cl.output.writeObject(name + ": " + str);
 									cl.output.flush();
 								}
 							}
 						}
 					}
+
 				} else throw new IllegalArgumentException();
 			} catch (IOException | NullPointerException e) {
 //TODO log
 				break;
 			} catch (ClassNotFoundException | SQLException e) {
+				e.printStackTrace();
+			} catch (ChatException e) {
 				e.printStackTrace();
 			}
 		}
@@ -130,8 +162,6 @@ public class ClientHandler implements Runnable {
 
 	void signIn(Credential credential) {
 		try {
-			Class.forName(driver);
-			Connection connection = DriverManager.getConnection(url, login, password);
 			String checkCredential = "SELECT * FROM users WHERE Hash = ?";
 			PreparedStatement stmt = connection.prepareStatement(checkCredential);
 			stmt.setInt(1, credential.getHash());
@@ -145,12 +175,13 @@ public class ClientHandler implements Runnable {
 				while (chats.next()) {
 					myChats.add(chats.getInt(1));
 				}
-				output.writeObject("You are logged in!!!");
+				output.writeObject(new User(name));
 				output.flush();
+				output.writeObject(server.chats.get(currentChatID));
 			} else {
-				str = "exit";
+				str = "exit";//TODO exit from server
 			}
-		} catch (ClassNotFoundException | SQLException e) {
+		} catch (SQLException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -159,8 +190,6 @@ public class ClientHandler implements Runnable {
 
 	void signUp(Credential credential) {
 		try {
-			Class.forName(driver);
-			Connection connection = DriverManager.getConnection(url, login, password);
 			String checkLogin = "SELECT * FROM users WHERE Hash = ?";
 			PreparedStatement stmt = connection.prepareStatement(checkLogin);
 			stmt.setInt(1, credential.getHash());
@@ -181,9 +210,11 @@ public class ClientHandler implements Runnable {
 				generalStmt.execute();
 				myChats.add(0);
 				output.writeObject("Registration complete");
+				output.writeObject(new User(name));
 				output.flush();
+				output.writeObject(server.chats.get(currentChatID));
 			} else throw new LoginExistsException();
-		} catch (ClassNotFoundException | SQLException e) {
+		} catch (SQLException e) {
 			e.printStackTrace();
 		} catch (LoginExistsException e) {
 //TODO log

@@ -1,16 +1,24 @@
 package Client;
 
+import Exceptions.ChatNotFoundException;
 import Units.Credential;
 import Units.Message;
+import Units.Requests.ChangeRequest;
+import Units.Requests.CreateRequest;
+import Units.Requests.EnterRequest;
+import Units.User;
 
 import javax.net.ssl.*;
 import java.io.*;
 import java.security.KeyStore;
+import java.util.ArrayList;
 import java.util.Scanner;
 
 public class Client {
 	Scanner sc = new Scanner(System.in);
 	String str = "";
+	private String name;
+	private int currentChatID = 0;
 	private ObjectOutputStream out;
 	private ObjectInputStream in;
 	private SSLSocket sslSocket;
@@ -35,20 +43,36 @@ public class Client {
 			in = new ObjectInputStream(sslSocket.getInputStream());
 
 
-			sign();
 			Resender resend = new Resender();
 			resend.start();
+			sign();
 
 
 			while (!str.equals("exit")) {
 				str = scan.nextLine();
-				Message message = new Message(str, 0);
-				out.writeObject(message);
-
+				switch (str) {
+					case "change chat":
+						System.out.print("Enter chat ID: ");
+						int chatID = scan.nextInt();
+						out.writeObject(new ChangeRequest(chatID));
+						break;
+					case "create chat":
+						System.out.print("Enter chat name: ");
+						out.writeObject(new CreateRequest(scan.next()));
+						break;
+					case "enter chat":
+						System.out.print("Enter chat name: ");
+						out.writeObject(new EnterRequest(scan.next()));
+						break;
+					default:
+						Message message = new Message(str, currentChatID);
+						out.writeObject(message);
+						break;
+				}
 			}
 			resend.setStop();
 		} catch (Exception e) {
-			e.printStackTrace();
+//TODO log
 		} finally {
 			close();
 		}
@@ -75,8 +99,31 @@ public class Client {
 		public void run() {
 			try {
 				while (!stoped) {
-					String str = (String) in.readObject();
-					System.out.println(str);
+					Object object = in.readObject();
+					if (object instanceof String) {
+						String str = (String) object;
+						System.out.println(str);
+					} else if (object instanceof User) {
+						System.out.println("You are logged in!");
+						name = ((User) object).getLogin();
+					} else if (object instanceof ArrayList) {
+						ArrayList<Message> messages = (ArrayList<Message>) object;
+						for (Message message : messages) {
+							if (message.getName().equals(name)) {
+								System.out.println("You: " + message.getText());
+							} else {
+								System.out.println(message.getName() + message.getText());
+							}
+						}
+					} else if (object instanceof ChatNotFoundException) {
+						ChatNotFoundException e = (ChatNotFoundException) object;
+						if (e.isFlag()) {
+							System.out.println("Your are not in that chat");
+						} else {
+							currentChatID = e.getChangeRequest().getChatID();
+							System.out.println("Chat changed");
+						}
+					}
 				}
 			} catch (IOException e) {
 //TODO log
@@ -96,7 +143,7 @@ public class Client {
 		System.out.print("Enter password: ");
 		String newPassword = sc.next();
 
-		Credential credential = null;
+		Credential credential;
 		try {
 			if (ans == 1) {
 				credential = new Credential(newLogin, newPassword, true);

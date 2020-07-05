@@ -1,21 +1,31 @@
 package Server;
 
+import Units.Message;
+
 import javax.net.ssl.*;
 import java.io.File;
 import java.io.IOException;
 import java.security.*;
 import java.security.cert.CertificateException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
 public class Server implements Runnable {
+	private final String driver = "com.mysql.cj.jdbc.Driver";
+	private final String url = "jdbc:mysql://localhost:9999/cm?serverTimezone=UTC";
+	private final String login = "root";
+	private final String sqlPassword = "root";
+	Connection connection;
 	List<ClientHandler> clients = Collections.synchronizedList(new ArrayList<ClientHandler>());
-	HashMap<Integer, ArrayList<Integer>> chats = new HashMap<>();
+	HashMap<Integer, ArrayList<Message>> chats = new HashMap<>();
 	private static volatile Server server = null;
 	private final int port = 9998;
-	//private SSLServerSocketFactory serverSocketFactory = (SSLServerSocketFactory) SSLServerSocketFactory.getDefault();
 	private SSLServerSocket serverSocket = null;
 	private Server(){}
 	public static Server newServer() {
@@ -44,6 +54,18 @@ public class Server implements Runnable {
 			System.setProperty("javax.net.ssl.trustStore", "C:\\Users\\Admin\\IdeaProjects\\CM\\src\\keystore.jks");
 			System.setProperty("javax.net.ssl.trustStorePassword", "password");
 			serverSocket = (SSLServerSocket) factory.createServerSocket(port);
+			Class.forName(driver);
+			connection = DriverManager.getConnection(url, login, sqlPassword);
+			ResultSet rs = connection.createStatement().executeQuery("SELECT * FROM messages");
+			while (rs.next()) {
+				if (!chats.containsKey(rs.getInt(4))) {
+					chats.put(rs.getInt(4), new ArrayList<>());
+				}
+				Message curMessage = new Message(rs.getInt(1), rs.getString(2),
+						rs.getInt(3), rs.getInt(4), rs.getString(5));
+				chats.get(rs.getInt(4)).add(curMessage);
+			}
+
 			while (true) {
 				ClientHandler client;
 				try {
@@ -57,15 +79,10 @@ public class Server implements Runnable {
 			}
 		} catch (IOException e) {
 //TODO log
-		} catch (CertificateException e) {
-			e.printStackTrace();
-		} catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
-		} catch (UnrecoverableKeyException e) {
-			e.printStackTrace();
-		} catch (KeyStoreException e) {
-			e.printStackTrace();
-		} catch (KeyManagementException e) {
+		} catch (CertificateException | NoSuchAlgorithmException |
+				UnrecoverableKeyException | KeyStoreException |
+				KeyManagementException | ClassNotFoundException |
+				SQLException e) {
 			e.printStackTrace();
 		} finally {
 			if (serverSocket != null) {

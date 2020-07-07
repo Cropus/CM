@@ -38,12 +38,11 @@ public class Server implements Runnable {
 		}
 		return server;
 	}
-
-	@Override
-	public void run() {
+	private void initializeSSLAndBD() {
+		final char[] password = "password".toCharArray();
+		final KeyStore keyStore;
 		try {
-			final char[] password = "password".toCharArray();
-			final KeyStore keyStore = KeyStore.getInstance(new File(".\\src\\keystore.jks"), password);
+			keyStore = KeyStore.getInstance(new File(".\\src\\keystore.jks"), password);
 			final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
 			trustManagerFactory.init(keyStore);
 			final KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("NewSunX509");
@@ -56,7 +55,14 @@ public class Server implements Runnable {
 			serverSocket = (SSLServerSocket) factory.createServerSocket(port);
 			Class.forName(driver);
 			connection = DriverManager.getConnection(url, login, sqlPassword);
-			ResultSet rs = connection.createStatement().executeQuery("SELECT * FROM messages");
+		} catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException | UnrecoverableKeyException | KeyManagementException | SQLException | ClassNotFoundException e) {
+			//e.printStackTrace();
+		}
+	}
+	private void loadOldMessages() {
+		ResultSet rs = null;
+		try {
+			rs = connection.createStatement().executeQuery("SELECT * FROM messages");
 			while (rs.next()) {
 				if (!chats.containsKey(rs.getInt(4))) {
 					chats.put(rs.getInt(4), new ArrayList<>());
@@ -65,6 +71,17 @@ public class Server implements Runnable {
 						rs.getInt(3), rs.getInt(4), rs.getString(5));
 				chats.get(rs.getInt(4)).add(curMessage);
 			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+
+	}
+
+	@Override
+	public void run() {
+		try {
+			initializeSSLAndBD();
+			loadOldMessages();
 
 			while (true) {
 				ClientHandler client;
@@ -78,14 +95,6 @@ public class Server implements Runnable {
 					e.printStackTrace();
 				}
 			}
-		} catch (IOException e) {
-			e.printStackTrace();
-		} catch (CertificateException | NoSuchAlgorithmException |
-				UnrecoverableKeyException | KeyStoreException |
-				KeyManagementException | ClassNotFoundException |
-				SQLException e) {
-			System.out.println("Problems with Certification");
-			e.printStackTrace();
 		} finally {
 			if (serverSocket != null) {
 				try {

@@ -11,7 +11,8 @@ import Units.User;
 
 import javax.net.ssl.*;
 import java.io.*;
-import java.security.KeyStore;
+import java.security.*;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Scanner;
 
@@ -23,31 +24,32 @@ public class Client {
 	private ObjectOutputStream out;
 	private ObjectInputStream in;
 	private SSLSocket sslSocket;
+	private void initializeSSL() throws CertificateException, NoSuchAlgorithmException, KeyStoreException, IOException, UnrecoverableKeyException, KeyManagementException {
+		final char[] password = "password".toCharArray();
+		final KeyStore keyStore = KeyStore.getInstance(new File("C:\\Users\\Admin\\IdeaProjects\\CM\\src\\keystore.jks"), password);
+		final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+		trustManagerFactory.init(keyStore);
+		final KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("NewSunX509");
+		keyManagerFactory.init(keyStore, password);
+		final SSLContext context = SSLContext.getInstance("SSL");
+		context.init(keyManagerFactory.getKeyManagers(), trustManagerFactory.getTrustManagers(), null);
+		final SSLSocketFactory factory = context.getSocketFactory();
+		System.setProperty("javax.net.ssl.trustStore", "C:\\Users\\Admin\\IdeaProjects\\CM\\src\\keystore.jks");
+		System.setProperty("javax.net.ssl.trustStorePassword", "password");
+		sslSocket = (SSLSocket) factory.createSocket("127.0.0.1", 9998);
+		out = new ObjectOutputStream(sslSocket.getOutputStream());
+		in = new ObjectInputStream(sslSocket.getInputStream());
+	}
 
 	public Client() {
 		Scanner scan = new Scanner(System.in);
 
 		try {
-			final char[] password = "password".toCharArray();
-			final KeyStore keyStore = KeyStore.getInstance(new File("C:\\Users\\Admin\\IdeaProjects\\CM\\src\\keystore.jks"), password);
-			final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-			trustManagerFactory.init(keyStore);
-			final KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("NewSunX509");
-			keyManagerFactory.init(keyStore, password);
-			final SSLContext context = SSLContext.getInstance("SSL");
-			context.init(keyManagerFactory.getKeyManagers(), trustManagerFactory.getTrustManagers(), null);
-			final SSLSocketFactory factory = context.getSocketFactory();
-			System.setProperty("javax.net.ssl.trustStore", "C:\\Users\\Admin\\IdeaProjects\\CM\\src\\keystore.jks");
-			System.setProperty("javax.net.ssl.trustStorePassword", "password");
-			sslSocket = (SSLSocket) factory.createSocket("127.0.0.1", 9998);
-			out = new ObjectOutputStream(sslSocket.getOutputStream());
-			in = new ObjectInputStream(sslSocket.getInputStream());
-
+			initializeSSL();
 
 			Resender resend = new Resender();
 			resend.start();
 			sign();
-
 
 			while (!str.equals("exit")) {
 				str = scan.nextLine();
@@ -131,7 +133,7 @@ public class Client {
 					}
 				}
 			} catch (IOException | ClassNotFoundException e) {
-				//e.printStackTrace();
+				e.printStackTrace();
 			}
 		}
 	}

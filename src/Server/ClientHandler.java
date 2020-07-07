@@ -54,6 +54,78 @@ public class ClientHandler implements Runnable {
 			e.printStackTrace();
 		}
 	}
+	private void handleCredential(Credential cred) {
+		if (!cred.isReg()) {
+			signUp(cred);
+		} else {
+			signIn(cred);
+		}
+		name = cred.getLogin();
+	}
+	private void handleChangeRequest(ChangeRequest changeRequest) throws IOException {
+		if (!myChats.contains(changeRequest.getChatID())) {
+			output.writeObject(new ChatNotFoundException(true, changeRequest));
+		} else {
+			currentChatID = changeRequest.getChatID();
+			output.writeObject(new ChatNotFoundException(false, changeRequest));
+		}
+		output.writeObject(server.chats.get(currentChatID));
+	}
+	private void handleCreateRequest(CreateRequest createRequest) throws SQLException {
+		PublicChat newChat = new PublicChat(((CreateRequest) createRequest).getName());
+		myChats.add(newChat.getID());
+		String addChatAndUsers = "INSERT INTO chatsandusers (ChatID, UserID) VALUES (?, ?)";
+		PreparedStatement userStmt = connection.prepareStatement(addChatAndUsers);
+		userStmt.setInt(1, newChat.getID());
+		userStmt.setInt(2, currentID);
+		userStmt.execute();
+		String addChatAndNames = "INSERT INTO chatsandnames (ChatID, Name) VALUES (?, ?)";
+		PreparedStatement nameStmt = connection.prepareStatement(addChatAndNames);
+		nameStmt.setInt(1, newChat.getID());
+		nameStmt.setString(2, newChat.getName());
+		nameStmt.execute();
+		currentChatID = newChat.getID();
+	}
+	private void handleEnterRequest(EnterRequest enterRequest) throws SQLException, ChatException, IOException {
+		String searchChat = "SELECT * FROM chatsandnames WHERE Name = ?";
+		PreparedStatement searchStmt = connection.prepareStatement(searchChat);
+		searchStmt.setString(1, enterRequest.getChatName());
+		ResultSet searchResult = searchStmt.executeQuery();
+		if (searchResult.next()) {
+			currentChatID = searchResult.getInt(1);
+			String enterChat = "INSERT INTO chatsandusers (ChatID, UserID) VALUES (?, ?)";
+			PreparedStatement enterChatStmt = connection.prepareStatement(enterChat);
+			enterChatStmt.setInt(1, currentChatID);
+			enterChatStmt.setInt(2, currentID);
+			enterChatStmt.execute();
+
+			myChats.add(currentChatID);
+		} else {
+			throw new ChatException();
+		}
+		output.writeObject(server.chats.get(currentChatID));
+	}
+	private void addMessage(Message message) throws SQLException {
+		String newMessage = "INSERT INTO messages (ID, text, `from`, `to`, fromName) VALUES (?, ?, ?, ?, ?)";
+		PreparedStatement preparedStmt = connection.prepareStatement(newMessage);
+		preparedStmt.setInt(1, message.getID());
+		preparedStmt.setString(2, str);
+		preparedStmt.setInt(3, currentID);
+		preparedStmt.setInt(4, currentChatID);
+		preparedStmt.setString(5, name);
+		preparedStmt.execute();
+		String connectMessageToChat = "INSERT INTO chatsandmessages (ChatID, MessageID) VALUES (?, ?)";
+		PreparedStatement connectMtoC = connection.prepareStatement(connectMessageToChat);
+		connectMtoC.setInt(1, currentChatID);
+		connectMtoC.setInt(2, message.getID());
+		connectMtoC.execute();
+		if (!server.chats.containsKey(currentChatID)) {
+			server.chats.put(currentChatID, new ArrayList<>());
+		}
+		message.setFrom(currentID);
+		message.setName(name);
+		server.chats.get(currentChatID).add(message);
+	}
 
 	@Override
 	public void run() {
@@ -62,81 +134,20 @@ public class ClientHandler implements Runnable {
 
 				Object in = input.readObject();
 				if (in instanceof Credential) {
-					Credential cred = (Credential) in;
-					if (!cred.isReg()) {
-						signUp(cred);
-					} else {
-						signIn(cred);
-					}
-					name = cred.getLogin();
+					handleCredential((Credential) in);
 				} else if (in instanceof ChangeRequest) {
-					ChangeRequest changeRequest = (ChangeRequest) in;
-					if (!myChats.contains(changeRequest.getChatID())) {
-						output.writeObject(new ChatNotFoundException(true, changeRequest));
-					} else {
-						currentChatID = changeRequest.getChatID();
-						output.writeObject(new ChatNotFoundException(false, changeRequest));
-					}
-					output.writeObject(server.chats.get(currentChatID));
+					handleChangeRequest((ChangeRequest) in);
 				} else if (in instanceof CreateRequest) {
-					PublicChat newChat = new PublicChat(((CreateRequest) in).getName());
-					myChats.add(newChat.getID());
-
-					String addChatAndUsers = "INSERT INTO chatsandusers (ChatID, UserID) VALUES (?, ?)";
-					PreparedStatement userStmt = connection.prepareStatement(addChatAndUsers);
-					userStmt.setInt(1, newChat.getID());
-					userStmt.setInt(2, currentID);
-					userStmt.execute();
-					String addChatAndNames = "INSERT INTO chatsandnames (ChatID, Name) VALUES (?, ?)";
-					PreparedStatement nameStmt = connection.prepareStatement(addChatAndNames);
-					nameStmt.setInt(1, newChat.getID());
-					nameStmt.setString(2, newChat.getName());
-					nameStmt.execute();
-					currentChatID = newChat.getID();
+					handleCreateRequest((CreateRequest) in);
 				} else if (in instanceof EnterRequest) {
-					EnterRequest enterRequest = (EnterRequest) in;
-					String searchChat = "SELECT * FROM chatsandnames WHERE Name = ?";
-					PreparedStatement searchStmt = connection.prepareStatement(searchChat);
-					searchStmt.setString(1, enterRequest.getChatName());
-					ResultSet searchResult = searchStmt.executeQuery();
-					if (searchResult.next()) {
-						currentChatID = searchResult.getInt(1);
-						String enterChat = "INSERT INTO chatsandusers (ChatID, UserID) VALUES (?, ?)";
-						PreparedStatement enterChatStmt = connection.prepareStatement(enterChat);
-						enterChatStmt.setInt(1, currentChatID);
-						enterChatStmt.setInt(2, currentID);
-						enterChatStmt.execute();
-
-						myChats.add(currentChatID);
-					} else {
-						throw new ChatException();
-					}
-					output.writeObject(server.chats.get(currentChatID));
+					handleEnterRequest((EnterRequest) in);
 				} else if (in instanceof Message) {
 					Message message = (Message) in;
 					message.setID(UID.generate());
 					message.setFrom(currentID);
 					str = message.getText();
 					if (str.equals("exit")) break;
-					String newMessage = "INSERT INTO messages (ID, text, `from`, `to`, fromName) VALUES (?, ?, ?, ?, ?)";
-					PreparedStatement preparedStmt = connection.prepareStatement(newMessage);
-					preparedStmt.setInt(1, message.getID());
-					preparedStmt.setString(2, str);
-					preparedStmt.setInt(3, currentID);
-					preparedStmt.setInt(4, currentChatID);
-					preparedStmt.setString(5, name);
-					preparedStmt.execute();
-					String connectMessageToChat = "INSERT INTO chatsandmessages (ChatID, MessageID) VALUES (?, ?)";
-					PreparedStatement connectMtoC = connection.prepareStatement(connectMessageToChat);
-					connectMtoC.setInt(1, currentChatID);
-					connectMtoC.setInt(2, message.getID());
-					connectMtoC.execute();
-					if (!server.chats.containsKey(currentChatID)) {
-						server.chats.put(currentChatID, new ArrayList<>());
-					}
-					message.setFrom(currentID);
-					message.setName(name);
-					server.chats.get(currentChatID).add(message);
+					addMessage(message);
 
 					synchronized (server.clients) {
 						Iterator<ClientHandler> iter = server.clients.iterator();

@@ -13,4 +13,5 @@
 3)change chat(При повторном входе в чат)
 
 Структура необходимой БД:
+
 ![Иллюстрация к проекту](https://github.com/Cropus/Pictures/blob/master/%D0%91%D0%94.PNG)

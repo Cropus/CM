@@ -1,6 +1,7 @@
 package Client;
 
 import Exceptions.ChatNotFoundException;
+import Exceptions.InfoException;
 import Units.Credential;
 import Units.Message;
 import Units.Requests.ChangeRequest;
@@ -72,7 +73,8 @@ public class Client {
 			}
 			resend.setStop();
 		} catch (Exception e) {
-//TODO log
+			System.out.println("Something went wrong...");
+			e.printStackTrace();
 		} finally {
 			close();
 		}
@@ -84,7 +86,8 @@ public class Client {
 			out.close();
 			sslSocket.close();
 		} catch (Exception e) {
-//TODO log
+			System.out.println("Problems with closing");
+			//e.printStackTrace();
 		}
 	}
 
@@ -112,7 +115,7 @@ public class Client {
 							if (message.getName().equals(name)) {
 								System.out.println("You: " + message.getText());
 							} else {
-								System.out.println(message.getName() + message.getText());
+								System.out.println(message.getName() + ": " + message.getText());
 							}
 						}
 					} else if (object instanceof ChatNotFoundException) {
@@ -123,12 +126,12 @@ public class Client {
 							currentChatID = e.getChangeRequest().getChatID();
 							System.out.println("Chat changed");
 						}
+					} else if (object instanceof InfoException) {
+						System.out.println(((InfoException) object).getMessage());
 					}
 				}
-			} catch (IOException e) {
-//TODO log
-			} catch (ClassNotFoundException e) {
-				e.printStackTrace();
+			} catch (IOException | ClassNotFoundException e) {
+				//e.printStackTrace();
 			}
 		}
 	}
@@ -154,9 +157,10 @@ public class Client {
 			}
 			out.writeObject(credential);
 		} catch (IllegalArgumentException e) {
-//TODO log
+			System.out.println("Wrong arguments!");
+			//e.printStackTrace();
 		} catch (IOException e) {
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 
 	}

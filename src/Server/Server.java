@@ -43,7 +43,7 @@ public class Server implements Runnable {
 	public void run() {
 		try {
 			final char[] password = "password".toCharArray();
-			final KeyStore keyStore = KeyStore.getInstance(new File("C:\\Users\\Admin\\IdeaProjects\\CM\\src\\keystore.jks"), password);
+			final KeyStore keyStore = KeyStore.getInstance(new File(".\\src\\keystore.jks"), password);
 			final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
 			trustManagerFactory.init(keyStore);
 			final KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("NewSunX509");
@@ -51,7 +51,7 @@ public class Server implements Runnable {
 			final SSLContext context = SSLContext.getInstance("SSL");
 			context.init(keyManagerFactory.getKeyManagers(), trustManagerFactory.getTrustManagers(), null);
 			final SSLServerSocketFactory factory = context.getServerSocketFactory();
-			System.setProperty("javax.net.ssl.trustStore", "C:\\Users\\Admin\\IdeaProjects\\CM\\src\\keystore.jks");
+			System.setProperty("javax.net.ssl.trustStore", ".\\src\\keystore.jks");
 			System.setProperty("javax.net.ssl.trustStorePassword", "password");
 			serverSocket = (SSLServerSocket) factory.createServerSocket(port);
 			Class.forName(driver);
@@ -74,22 +74,25 @@ public class Server implements Runnable {
 					Thread thread = new Thread(client);
 					thread.start();
 				} catch (IOException e) {
-//TODO log
+					System.out.println("Connection error");
+					e.printStackTrace();
 				}
 			}
 		} catch (IOException e) {
-//TODO log
+			e.printStackTrace();
 		} catch (CertificateException | NoSuchAlgorithmException |
 				UnrecoverableKeyException | KeyStoreException |
 				KeyManagementException | ClassNotFoundException |
 				SQLException e) {
+			System.out.println("Problems with Certification");
 			e.printStackTrace();
 		} finally {
 			if (serverSocket != null) {
 				try {
 					serverSocket.close();
 				} catch (IOException e) {
-//TODO log
+					System.out.println("Problems with server.close()");
+					e.printStackTrace();
 				}
 			}
 		}

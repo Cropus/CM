@@ -2,6 +2,7 @@ package Server;
 
 import Exceptions.ChatException;
 import Exceptions.ChatNotFoundException;
+import Exceptions.InfoException;
 import Exceptions.LoginExistsException;
 import Units.Chats.PublicChat;
 import Units.Credential;
@@ -44,10 +45,12 @@ public class ClientHandler implements Runnable {
 			input = new ObjectInputStream(clientSocket.getInputStream());
 			output = new ObjectOutputStream(clientSocket.getOutputStream());
 		} catch (IOException e) {
-//TODO log
+			System.out.println("Socket problem");
+			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		} catch (SQLException e) {
+			System.out.println("Problems with DB");
 			e.printStackTrace();
 		}
 	}
@@ -149,12 +152,9 @@ public class ClientHandler implements Runnable {
 					}
 
 				} else throw new IllegalArgumentException();
-			} catch (IOException | NullPointerException e) {
-//TODO log
-				break;
-			} catch (ClassNotFoundException | SQLException e) {
-				e.printStackTrace();
-			} catch (ChatException e) {
+			} catch (IOException | NullPointerException |
+					ClassNotFoundException | SQLException |
+					ChatException e) {
 				e.printStackTrace();
 			}
 		}
@@ -179,11 +179,11 @@ public class ClientHandler implements Runnable {
 				output.flush();
 				output.writeObject(server.chats.get(currentChatID));
 			} else {
-				str = "exit";//TODO exit from server
+				str = "exit";
+				output.writeObject(new InfoException("Wrong data"));
+				output.flush();
 			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
+		} catch (SQLException | IOException e) {
 			e.printStackTrace();
 		}
 	}
@@ -213,12 +213,12 @@ public class ClientHandler implements Runnable {
 				output.writeObject(new User(name));
 				output.flush();
 				output.writeObject(server.chats.get(currentChatID));
-			} else throw new LoginExistsException();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		} catch (LoginExistsException e) {
-//TODO log
-		} catch (IOException e) {
+				output.flush();
+			} else {
+				output.writeObject(new InfoException("Login not available"));
+				output.flush();
+			}
+		} catch (SQLException | IOException e) {
 			e.printStackTrace();
 		}
 	}

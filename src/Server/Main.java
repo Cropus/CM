@@ -13,6 +13,7 @@ public class Main {
 		mainThread.start();
 		if (scan.nextLine().equals("exit")) {
 			UID.save();
+			System.exit(0);
 		}
 	}
 }
